@@ -46,6 +46,23 @@ dupIds %>% length
 metadataDistinct <- metadata %>% distinct()
 metadataDistinct %>% nrow
 
+# Size of cord_uid groups
+freq <- metadata %>%
+  select(cord_uid) %>%
+  group_by(cord_uid) %>%
+  summarise(cnt=n()) %>%
+  arrange(desc(cnt)) %>%
+  pull(cnt) %>% 
+  table() %>%
+  as.data.frame() %>%
+  rename(cnt=1) %>%
+  mutate(
+    cnt = cnt %>% as.character() %>% as.integer()
+  ) %>%
+  arrange(desc(cnt))
+
+freq %>% View
+
 # Are there any cases of same cord_uuid and different source_x? YES many
 sameCoordUuidDiffSources <- metadata %>% 
   select(cord_uid, source_x) %>%
