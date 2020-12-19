@@ -36,8 +36,8 @@ allCount <- metadata %>% nrow
 allCount
 
 # Number of duplicate ids
-dupIds <- metadata %>% pull(cord_uid) %>% duplicated()
-dupIds %>% length
+duplicatedLog <- metadata %>% pull(cord_uid) %>% duplicated()
+numDuplicates <- sum(duplicatedLog)
 
 # Share of duplicate ids - All ids are duplicated
 (dupIds %>% length())/allCount
