@@ -1,0 +1,53 @@
+---
+title: "Article parsing recommendations"
+output: html_document
+---
+
+## Author parsing
+
+Considering a metadata file, `authors` column is provided in `;`-delimited form.
+When authors are parsed incorrectly, the following annomalies occur.
+
+### Nonseparated authors
+
+Some WHO papers have bad authors listings, unparsable.
+https://pesquisa.bvsalud.org/global-literature-on-novel-coronavirus-2019-ncov/resource/en/covidwho-881932
+https://search.bvsalud.org/global-literature-on-novel-coronavirus-2019-ncov/resource/en/ppcovidwho-2056
+
+MITIGATION: Nothing could be done. These papers should be eliminated.
+
+### Apostrophes
+
+Apostrophes in cases of "O'Brian" are sometimes parsed incorrectly. 
+Search for the string "039" in `authors` field.
+Some problems are maybe related to use of backquote and other "single" quote chracters.
+
+Backquote problems
+https://www.sciencedirect.com/science/article/pii/S2214790X20302185   
+
+Not apostrophe
+https://www.medrxiv.org/content/10.1101/2020.10.06.20208025v1
+
+### HTML-Unicode characters with &
+
+### Author name surname order
+
+
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
