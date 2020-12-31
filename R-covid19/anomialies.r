@@ -14,12 +14,15 @@ require(data.table)
 # If you do not have current metadata, set DOWNLOAD to TRUE and run the below if statement
 PATH_TO_DATA="../../data/latest_metadata"
 METADATA <- sprintf("%s/metadata.csv", PATH_TO_DATA) 
-DOWNLOAD <- TRUE
+DOWNLOAD <- FALSE
 LOAD <- TRUE
 # Download metadata.csv from 
 # https://ai2-semanticscholar-cord-19.s3-us-west-2.amazonaws.com/historical_releases.html
 # Place the file metadata.csv (possibly fix the path)
 # metadata.csv size is 0.5GB hence it is not part of the git repositry
+# MD5: 31.12.2020: ad5769ec1f38307501e0161db3ed014a
+# require(tools)
+# md5sum(METADATA)
 
 # Download the last version of metadata
 
@@ -59,7 +62,7 @@ if (DOWNLOAD) {
   toc()   # much faster, takes < 8s
 }
 
-# metadata0 %>% View
+# metadata %>% View
 
 ########################################################################
 ## METADATA: Enumerate lines
@@ -127,15 +130,11 @@ cat(sprintf("Share of distinct lines: %d/%d lines (%.2f%%)", distinctLinesCount,
 
 # Size of cord_uid groups
 
-{
-  tic()
-  cordUidAppearanceCount <- 
-    metadata[, 
-             .(cord_uid_cnt=.N), by=cord_uid][
-               order(-cord_uid_cnt)
-             ]
-  toc()
-}
+cordUidAppearanceCount <- 
+  metadata[, 
+           .(cord_uid_cnt=.N), by=cord_uid][
+             order(-cord_uid_cnt)
+           ]
 
 # METADATA: Add column `cord_uid_cnt` (number of apperances of cord_uid)
 if(! ("cord_uid_cnt" %in% names(metadata))) {
@@ -146,7 +145,7 @@ if(! ("cord_uid_cnt" %in% names(metadata))) {
 }
 
 
-metadata %>% View
+# metadata %>% View
 
   
 # Frequencies of `cord_uid_cnt`
@@ -174,14 +173,6 @@ manyCordId <- cordUidAppearanceCount %>% filter(cord_uid_cnt > 6)
 differentAuthorsStringCnt <- metadata[,.(author_diff_cnt=length(unique(authors))), by=.(cord_uid, cord_uid_cnt)][
   order(-author_diff_cnt, -cord_uid_cnt )
 ]
-
-# differentAuthorsStringCnt %>% View
-
-# OLD WAY
-# differentAuthorsStringCnt <- metadata %>% 
-#   group_by(cord_uid, cord_uid_cnt) %>%
-#   summarise(author_diff_cnt=n_distinct(authors)) %>% 
-#   arrange(desc(author_diff_cnt), desc(cord_uid_cnt))
 
 # differentAuthorsStringCnt %>% View
 
@@ -252,7 +243,6 @@ metadata <- metadata %>% filter(author_diff_cnt <= 2)
 
 ## Very long author lists
 maxLen <- 200
-
 
 metadata %>% 
   filter(cord_uid_cnt == 1, str_length(authors) > maxLen, !str_detect(authors, ";")) %>% 
@@ -351,6 +341,31 @@ okWhoShare <- metadata %>%
 # "Bad" paper share  (5% WHO articles are wrongly parsed)
 cat(sprintf("%d/%d (%.2f%%) of WHO papers seem to have correctly parsed multiple authors", 
             okWhoShare, allWho, okWhoShare/allWho * 100))
+
+strange1Cnt <- metadata %>%
+  filter(strange_1 == 1) %>%
+  nrow()
+
+strange2Cnt <- metadata %>%
+  filter(strange_2 == 1) %>%
+  nrow()
+
+
+cat(sprintf("Dropping %d of 'strange_1' and %d of 'strange_2.", strange1Cnt, strange2Cnt))
+metadata %>%
+  filter(strange_2 == 1) %>%
+  pull(cord_uid) %>%
+  unique %>%
+  (function(strangeIds) {
+    metadata %>% filter(cord_uid %in% strangeIds)
+  }) %>%
+  .[,.N, by=cord_uid] %>% 
+  (function(data) {
+    all <- data %>% nrow
+    onlyOne <- data[N < 2, .(.N)]$N
+    sprintf("%d of %d of 'strange_2' (%.1f%%) is single entry", onlyOne, all, onlyOne/all*100)
+  }) %>%
+  cat
 
 # METADATA: drop `strange_1` and `strange_2`
 metadata <- metadata %>% 
