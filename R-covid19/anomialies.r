@@ -1,19 +1,38 @@
-require(readr)
-require(dplyr)
-require(tidyr)
-require(tictoc)
-require(stringr)
-require(tidyr)
-require(openxlsx)
-require(rvest)
-require(purrr)
-require(data.table)
+packages <- c(
+  "readr", 
+  "dplyr", 
+  "tidyr", 
+  "tictoc", 
+  "stringr", 
+  "openxlsx", 
+  "rvest", 
+  "purrr", 
+  "data.table"
+)
+
+for (package in packages) {
+  if (!package %in% installed.packages()) {
+    install.packages(
+      package,
+      dependencies = TRUE
+    )
+  }
+  if (!package %in% .packages()) {
+    library(
+      package,
+      character.only = TRUE
+    )
+  }
+}
 
 # assign("last.warning", NULL, envir = baseenv())
 # Be sure to have this folder.
 # If you do not have current metadata, set DOWNLOAD to TRUE and run the below if statement
-PATH_TO_DATA="../../data/latest_metadata"
-METADATA <- sprintf("%s/metadata.csv", PATH_TO_DATA) 
+DATA_FOLDER <- "../../data"
+PATH_TO_DATA <- file.path(DATA_FOLDER, "latest_metadata")
+METADATA <- file.path(PATH_TO_DATA, "metadata.csv") 
+TMP_DATA_FOLDER <- "tmp_data"
+dir.create(TMP_DATA_FOLDER, showWarnings = FALSE)
 DOWNLOAD <- FALSE
 LOAD <- TRUE
 # Download metadata.csv from 
@@ -38,6 +57,8 @@ if (DOWNLOAD) {
   # https://ai2-semanticscholar-cord-19.s3-us-west-2.amazonaws.com/YYYY-MM-dd/metadata.csv
   
   metadataURL <- sprintf("https://ai2-semanticscholar-cord-19.s3-us-west-2.amazonaws.com/%s/metadata.csv", latestReleaseDate)
+  dir.create(DATA_FOLDER, showWarnings = FALSE)
+  dir.create(PATH_TO_DATA, showWarnings = FALSE)
   download.file(metadataURL, METADATA)
 }
 
@@ -218,7 +239,7 @@ parity.tab <- moreThen2AuthorStrings %>%
 
 moreThen2AuthorStrings %>%
   left_join(parity.tab, by="cord_uid") %>%
-  write.xlsx("tmp_data/moreThan2.xlsx")
+  write.xlsx(file.path(TMP_DATA_FOLDER, "moreThan2.xlsx"))
 
 # Dirty trick in Excel (using parity column, formula: =AND(LEN($A2)>0; MOD($Y2; 2)=0)  )
 # https://www.extendoffice.com/documents/excel/2661-excel-alternate-row-color-based-on-group.html
@@ -310,7 +331,7 @@ cat(sprintf("%d cases of WHO papers with `authors` longer than %d and no `;` sep
 
 # Inspect in Excel
 longWHOStrange %>% 
-  write.xlsx("tmp_data/who.xlsx")
+  write.xlsx(file.path(TMP_DATA_FOLDER, "/who.xlsx"))
 
 # No parsed .json files
 # In general authors are really poorly parsed. Strange format (first with comma, others with spaces: ")
@@ -587,7 +608,7 @@ metadata %>% filter(str_detect(authors, " amp[^,;]")) %>%
   select(authors, title) %>% View
 
 
-  write.xlsx("tmp_data/amp.xlsx")
+  write.xlsx(file.path(TMP_DATA_FOLDER, "amp.xlsx"))
 
 metadata %>% filter()
 
@@ -611,7 +632,7 @@ authorsCommaWithNumbersPaperIds <- commaAuthors %>%
 
 metadata %>%
   filter(cord_uid %in% authorsCommaWithNumbersPaperIds) %>%
-  write.xlsx("tmp_data/comma-numbers.xlsx")
+  write.xlsx(file.path(TMP_DATA_FOLDER, "comma-numbers.xlsx"))
 
 ## 039 appears often - due to apostrof 
 
@@ -635,7 +656,7 @@ institutionCommaNames <- commaAuthors %>%
   
 metadata %>%
   filter(cord_uid %in% institutionCommaNames) %>%
-  write.xlsx("tmp_data/comma-institutions.xlsx")
+  write.xlsx(file.path(TMP_DATA_FOLDER, "comma-institutions.xlsx"))
 
 ## All such cases with institution names among authors come from MedRxiv
 
@@ -655,7 +676,7 @@ commaAuthorsPapers <- metadata %>%
 
 commaAuthorsPapers %>% 
   arrange(cord_uid) %>%
-  write.xlsx("tmp_data/comma_trail.xlsx")
+  write.xlsx(file.path(TMP_DATA_FOLDER, "comma_trail.xlsx"))
 
 ## ANALYSIS
 # If source is ArXiv, remove trailing comma, process the paper later by putting name abreviation to the end
@@ -819,7 +840,7 @@ duplicatedAuthorsCordUids <- duplicatedAuthors %>%
 
 metadata %>%
   filter(cord_uid %in% duplicatedAuthorsCordUids) %>%  
-  write.xlsx("tmp_data/duplicated_authors.xlsx")
+  write.xlsx(file.path(TMP_DATA_FOLDER, "duplicated_authors.xlsx"))
 
 
 # Most duplicates ij3ncdb6
