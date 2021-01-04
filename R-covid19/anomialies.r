@@ -25,15 +25,13 @@ for (package in packages) {
   }
 }
 
-# assign("last.warning", NULL, envir = baseenv())
-# Be sure to have this folder.
 # If you do not have current metadata, set DOWNLOAD to TRUE and run the below if statement
 DATA_FOLDER <- "../../data"
 PATH_TO_DATA <- file.path(DATA_FOLDER, "latest_metadata")
 METADATA <- file.path(PATH_TO_DATA, "metadata.csv") 
 TMP_DATA_FOLDER <- "tmp_data"
 dir.create(TMP_DATA_FOLDER, showWarnings = FALSE)
-DOWNLOAD <- FALSE
+DOWNLOAD <- TRUE
 LOAD <- TRUE
 # Download metadata.csv from 
 # https://ai2-semanticscholar-cord-19.s3-us-west-2.amazonaws.com/historical_releases.html
@@ -53,13 +51,29 @@ if (DOWNLOAD) {
     str_extract("Latest release\\:\\s*\\d{4}\\-\\d{2}\\-\\d{2}") %>%
     str_extract("\\d{4}\\-\\d{2}\\-\\d{2}")
   
-  # Download latest release data to
-  # https://ai2-semanticscholar-cord-19.s3-us-west-2.amazonaws.com/YYYY-MM-dd/metadata.csv
+  DATE_FILE <- file.path(PATH_TO_DATA, paste0(latestReleaseDate, ".date"))
   
-  metadataURL <- sprintf("https://ai2-semanticscholar-cord-19.s3-us-west-2.amazonaws.com/%s/metadata.csv", latestReleaseDate)
-  dir.create(DATA_FOLDER, showWarnings = FALSE)
-  dir.create(PATH_TO_DATA, showWarnings = FALSE)
-  download.file(metadataURL, METADATA)
+  if(!file.exists(DATE_FILE)) {
+    message(sprintf("Downloading latest 'metadata.csv' for the date %s.", latestReleaseDate))
+    # Download latest release data to
+    # https://ai2-semanticscholar-cord-19.s3-us-west-2.amazonaws.com/YYYY-MM-dd/metadata.csv
+    
+    metadataURL <- sprintf("https://ai2-semanticscholar-cord-19.s3-us-west-2.amazonaws.com/%s/metadata.csv", latestReleaseDate)
+    dir.create(DATA_FOLDER, showWarnings = FALSE)
+    dir.create(PATH_TO_DATA, showWarnings = FALSE)
+    if(file.exists(METADATA)) {
+      message(sprintf("Existing file MD5: %s", md5sum(METADATA)))
+    }
+    download.file(metadataURL, METADATA)
+    # clean up all .date files
+    for(file in list.files(path = PATH_TO_DATA, pattern = "\\.date")) {
+      file.remove(file.path(PATH_TO_DATA, file))
+    }
+    file.create(DATE_FILE)
+    message(sprintf("Latest 'metadata.csv' (%s) downloaded. MD5: %s", latestReleaseDate, md5sum(METADATA)))
+  } else {
+    message(sprintf("Latest 'metadata.csv' up to date (%s).", latestReleaseDate))
+  }
 }
 
 ## Import all data
@@ -94,31 +108,7 @@ if(! ("row_id" %in% names(metadata))) {
   metadata <- metadata %>% mutate(row_id = row_number())
 }
 
-## Helper functions
-articleView <- function(metadata, cordUid) {
-  metadata %>% filter(cord_uid == cordUid) %>% View
-}
-
-distinctArticleCount <- function(data) {
-  data %>%
-    select(cord_uid) %>%
-    distinct() %>% nrow
-}
-
-sortedFreqs <- function(column) {
-    DT <- column %>% data.table(entity = .) 
-    DT[, .(cnt=.N), by=.(entity)][order(-cnt)]
-}
-
-replacePattern <- function(text, rules) {
-  pmap(list(names(rules), rules), list) %>% 
-    reduce(
-      .f=function(txt, repl) {
-        str_replace_all(txt, repl[[1]], repl[[2]])
-      }, 
-      .init=text
-    )
-}
+source("transformations.r")
 
 # replaceAmp <- partial(replacePattern, rules=ampMapping)
 
@@ -151,11 +141,15 @@ cat(sprintf("Share of distinct lines: %d/%d lines (%.2f%%)", distinctLinesCount,
 
 # Size of cord_uid groups
 
-cordUidAppearanceCount <- 
-  metadata[, 
-           .(cord_uid_cnt=.N), by=cord_uid][
-             order(-cord_uid_cnt)
-           ]
+# cordUidAppearanceCount <- 
+#   metadata[, 
+#            .(cord_uid_cnt=.N), by=cord_uid][
+#              order(-cord_uid_cnt)
+#            ]
+
+cordUidAppearanceCount <- metadata %>%
+  .[, .(cord_uid_cnt=.N), by=cord_uid] %>%
+  .[order(-cord_uid_cnt)]
 
 # METADATA: Add column `cord_uid_cnt` (number of apperances of cord_uid)
 if(! ("cord_uid_cnt" %in% names(metadata))) {
@@ -190,10 +184,9 @@ manyCordId <- cordUidAppearanceCount %>% filter(cord_uid_cnt > 6)
 # How many such with several cord_uid and different `authors` string?
 
 
-
-differentAuthorsStringCnt <- metadata[,.(author_diff_cnt=length(unique(authors))), by=.(cord_uid, cord_uid_cnt)][
-  order(-author_diff_cnt, -cord_uid_cnt )
-]
+differentAuthorsStringCnt <- metadata %>%
+  . [,.(author_diff_cnt=length(unique(authors))), by=.(cord_uid, cord_uid_cnt)] %>%
+  . [order(-author_diff_cnt, -cord_uid_cnt )]
 
 # differentAuthorsStringCnt %>% View
 
@@ -269,7 +262,7 @@ metadata %>%
   filter(cord_uid_cnt == 1, str_length(authors) > maxLen, !str_detect(authors, ";")) %>% 
   select(cord_uid, cord_uid_cnt, authors, source_x) %>% 
   nrow %>%
-  cat(sprintf("\n%d cases at maxLen = %d: unique `cord_uid` entries where `authors` are not sparated by `;` - wrong parsing", ., maxLen))
+  cat(sprintf("\n%d cases at maxLen = %d: unique `cord_uid` entries where `authors` are not separated by `;` - wrong parsing", ., maxLen))
 # All come from source_x = WHO (240)
 
 
@@ -407,10 +400,10 @@ metadata <- metadata %>%
 #   arrange(desc(cnt))
 # 
 # sameCoordUuidDiffSources %>% View
-sameCoordUuidDiffSources <- metadata[,.(cnt=length(unique(source_x))), by=cord_uid][
-  cnt > 1][
-    order(-cnt)
-  ]
+sameCoordUuidDiffSources <- metadata %>%
+  .[,.(cnt=length(unique(source_x))), by=cord_uid] %>%
+  .[cnt > 1] %>%
+  .[order(-cnt)]
 
 # Examples with 3 different sources.
 sameCoordUuidDiffSources3 <- sameCoordUuidDiffSources %>% 
@@ -436,7 +429,11 @@ sameCoordUuidDiffSources3 <- sameCoordUuidDiffSources %>%
 #   filter(cnt > 1) %>%
 #   arrange(desc(cnt))
 
-diffCordUidS2Id <- metadata[, .(cnt=length(unique(s2_id))), by=cord_uid][cnt > 1][order(-cnt)]
+diffCordUidS2Id <- metadata %>%
+  .[, .(cnt=length(unique(s2_id))), by=cord_uid] %>%
+  .[cnt > 1] %>%
+  .[order(-cnt)]
+
 diffCordUidS2Id %>% 
   nrow
 
@@ -498,9 +495,9 @@ metadata %>%
   mutate(
     authors_new=str_replace_all(authors_new, "\\,\\;", ";"),
     x=1
-  ) %>% View
+  ) %>% nrow
 
-## 039 -> "'" - fixing separation
+## METADATA: 039 -> "'" - fixing separation
 metadata <- metadata %>% 
   mutate(
     authors_0 = authors,
@@ -516,23 +513,27 @@ metadata %>% filter(str_detect(authors, "\\,\\;")) %>% nrow # Will be handled/an
 metadata %>% filter(str_detect(authors, "\\;\\,")) %>% nrow
 
 # separating by `;` and trimming, removing exact duplicates (due to cord_uid groups)
+
+# extractAllAuthors <- function(metadata) {
+#   metadata %>% 
+#     select(row_id, cord_uid, source_x, authors, title) %>% 
+#     # separate_rows(authors, sep=";") %>%  # too slow
+#     .[, .(authors =  unlist(strsplit(authors, ";", fixed = TRUE))), 
+#       by = .(row_id, cord_uid, source_x, title)] %>%
+#     mutate(
+#       authors=str_trim(authors)
+#     ) %>%
+#     distinct() %>%
+#     mutate(
+#       author_row=row_number()
+#     )
+# }
+
 {
-  
-tic()
-allAuthors <-  metadata %>% 
-  select(row_id, cord_uid, source_x, authors, title) %>% 
-  separate_rows(authors, sep=";") %>% 
-  mutate(
-    authors=str_trim(authors)
-  ) %>%
-  distinct() %>%
-  mutate(
-    author_row=row_number()
-  )
+  tic()
+  allAuthors <- extractAllAuthors(metadata)
   toc()
 }
-allAuthors0 <- allAuthors
-allAuthors <- allAuthors0   # reset
 
 allAuthors %>% nrow
 
@@ -582,36 +583,114 @@ metadata %>% filter(str_detect(authors, ampExpression)) %>%
   sortedFreqs() %>% View
   # (function(x) {for(i in x[[1]]) print(i)})
 
+ampAuthors <- metadata %>% filter(str_detect(authors, ampExpression)) 
+
+ampAuthors %>% 
+  write.xlsx(file.path(TMP_DATA_FOLDER, "amp.xlsx"))
+
 # "amp" ones are mostly indeterministically parsable
 # SUGGESTION - remove them
 
-# https://www.utf8-chartable.de/unicode-utf8-table.pl?htmlent=1
-# https://www.rapidtables.com/code/text/unicode-characters.html
+if(! ("amp" %in% names(metadata))) {
+  metadata <- metadata %>% 
+    left_join(ampAuthors %>% select(row_id) %>% mutate(amp = 1), by="row_id")
+}
+  
+# METADATA: drop `amp`
+metadata <- metadata %>% 
+  filter(is.na(amp)) %>%
+  select(-amp)
 
+# recalculate All authors
+allAuthors <- extractAllAuthors(metadata)
 
+# Other comma names
+allAuthors %>% 
+  filter(str_detect(authors, commaPattern)) %>%
+  pull(authors) %>%
+  sortedFreqs() %>%
+  View
 
-metadata %>% filter(str_detect(authors, ampExpression)) %>% 
-  select(title, authors, url) %>% 
-  filter(str_detect(authors," amp; Iacute," )) %>% 
+etPatternMetadata <- "; ?et,"
+metadata %>%
+  filter(str_detect(authors, etPatternMetadata)) %>%
+  View
+
+etPattern <- "^et,$"
+allAuthors %>% 
+  filter(!str_detect(authors, etPattern)) %>% View
+## Anomalies
+# - "Jr.", - replace ";\\s?Jr\\.
+# "et", "al."
+# - Single letter, eg. "M."
+
+allAuthors %>% filter(str_detect(authors, "^Jr.,")) %>% View
+JrCordUids <- allAuthors %>% 
+  filter(str_detect(authors, "^Jr.,")) %>% 
+  pull(cord_uid) %>%
+  unique
+
+# metadata %>% filter(cord_uid %in% JrCordUids) %>%
+#   arrange(cord_uid) %>%
+#   select(row_id, cord_uid, authors, title, source_x) %>%
+#   mutate(
+#     authors_2 = authors,
+#     authors = ifelse(cord_uid %in% JrCordUids,
+#                      str_replace_all(authors, ";( Jr\\.)", "\\1"),
+#                      authors
+#     )
+#   ) %>% View
+
+# METADATA: fix Jr.,
+metadata <- metadata %>% 
   mutate(
-    authors_new = ifelse(
-      str_detect(authors, ampExpression),
-      replaceAmp(authors),
-      authors
+    authors_2 = authors,
+    authors = ifelse(cord_uid %in% JrCordUids,
+                     str_replace_all(authors, ";( Jr\\.)", "\\1"),
+                     authors
     )
-  ) %>% View
-# metadata %>% filter(str_detect(authors,   )) %>% View
+  )
 
 
-  select(authors, title) %>% nrow
-metadata %>% filter(str_detect(authors, " amp[^,;]")) %>% 
-  select(authors, title) %>% View
+jrPattern <- "^(.*)[\\, ]Jr\\.?\\,(.*)\\,?$"
+jrPatternUids <- allAuthors %>% 
+  filter(str_detect(authors, jrPattern)) %>%
+  pull(cord)
 
+allAuthorsFixJr <- function(allAuthors) {
+  allAuthors %>% filter(str_detect(authors, jrPattern)) %>% 
+    mutate(
+      authors_3=authors,
+      authors=str_replace(authors, "^(.*)\\,$", "\\1") %>%
+        str_replace(jrPattern, "\\1, \\2 Jr.") %>% 
+        str_replace("\\,\\,?  ?", ", ")
+    ) 
+}
 
-  write.xlsx(file.path(TMP_DATA_FOLDER, "amp.xlsx"))
+allAuthors %>% View
+allAuthors %>% filter(str_detect(authors, jrPattern)) %>% 
+  mutate(
+    authors_3=authors,
+    authors=str_replace(authors, "^(.*)\\,$", "\\1") %>%
+      str_replace(jrPattern, "\\1, \\2 Jr.") %>% 
+      str_replace("\\,\\,?  ?", ", ")
+  ) %>%
+  View
 
-metadata %>% filter()
+# METADATA: fix Jr.,
+metadata <- metadata %>% 
+  mutate(
+    authors_3=authors,
+    authors = ifelse(cord_uid %in% JrCordUids,
+                     str_replace_all(authors, ";( Jr\\.)", "\\1"),
+                     authors
+    )
+  )
 
+# metadata %>% articleView("55xkpt43")
+# Jr., C.M.C. Inácio -> Inacio, C.M.C Jr."
+
+allAuthors %>% filter(str_detect(authors, "^Jr.,")) %>% View
 
 ## Comma authors containing numbers, but not 19
 commaAuthors %>%
