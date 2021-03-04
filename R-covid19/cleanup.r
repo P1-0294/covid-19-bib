@@ -16,7 +16,8 @@ packages <- c(
   "rvest", 
   "purrr", 
   "data.table",
-  "tools"
+  "tools",
+  "utf8"
 )
 
 for (package in packages) {
@@ -48,6 +49,7 @@ TMP_DATA_FOLDER <- "tmp_data"
 dir.create(TMP_DATA_FOLDER, showWarnings = FALSE)
 DOWNLOAD <- TRUE
 LOAD <- TRUE
+
 # Download metadata.csv from 
 # https://ai2-semanticscholar-cord-19.s3-us-west-2.amazonaws.com/historical_releases.html
 # Place the file metadata.csv (possibly fix the path)
@@ -265,6 +267,18 @@ metadata <- metadata %>%
   filter(is.na(amp)) %>%
   select(-amp)
 
+
+# METADATA: drop some other 'amp' related papers (unparsable)
+amp2pattern <- "(amp,;)|(Iacute,;)|(Uuml,;)|(acute[,;])|(breve,)|(uml[,;])|([sScCZz]caron[,;])"
+test.amp2 <- metadata %>% 
+  filter(!str_detect(authors, amp2pattern)) %>%
+  pull(cord_uid) %>%
+  unique()
+
+message(sprintf("Dropping %d papers with pattern \"(amp,;)|(Iacute,;)|(Uuml,;)|(acute[,;])|(breve,)|(uml[,;])\" in 'authors", test.amp2 %>% length))
+metadata <- metadata %>% 
+  filter(!str_detect(authors, amp2pattern))
+
 # recalculate All authors
 {
   message("Extracting authors")
@@ -273,13 +287,39 @@ metadata <- metadata %>%
   toc()
 }
 
-## Fix "Jr."
+## Fix "Jr.", "Sr.", "2nd"
 test.Jr <- allAuthors %>% 
-  filter(str_detect(authors, "^Jr.,")) %>% 
+  filter(str_detect(authors, "^Jr\\.,")) %>% 
   pull(cord_uid) %>%
   unique
 
-message(sprintf("Fixing 'authors' strings on %s papers in regard to 'Jr.' wrong parsing", test.Jr %>% length()))
+test.Sr <- allAuthors %>% 
+  filter(str_detect(authors, "^Sr\\.,")) %>% 
+  pull(cord_uid) %>%
+  unique
+
+test.2nd <- allAuthors %>% 
+  filter(str_detect(authors, "^2nd,")) %>% 
+  pull(cord_uid) %>%
+  unique
+
+test.3rd <- allAuthors %>% 
+  filter(str_detect(authors, "^3rd,")) %>% 
+  pull(cord_uid) %>%
+  unique
+
+test.III <- allAuthors %>% 
+  filter(str_detect(authors, "^III,")) %>% 
+  pull(cord_uid) %>%
+  unique
+
+message(sprintf("Fixing 'authors' strings on %d/%d/%d/%d/%d papers in regard to 'Jr./Sr./2nd/3rd/III' wrong parsing", 
+                test.Jr %>% length(),
+                test.Sr %>% length(),
+                test.2nd %>% length(),
+                test.3rd %>% length(),
+                test.III %>% length()
+                ))
 # METADATA: fix Jr., when separated into separate "author"
 metadata <- metadata %>% 
   mutate(
@@ -288,7 +328,32 @@ metadata <- metadata %>%
                      str_replace_all(authors, ";( Jr\\.)", "\\1"),
                      authors
     )
+  ) %>%
+  mutate(
+    authors = ifelse(cord_uid %in% test.Sr,
+                     str_replace_all(authors, ";( Sr\\.)", "\\1"),
+                     authors
+    )
+  ) %>%
+  mutate(
+    authors = ifelse(cord_uid %in% test.2nd,
+                     str_replace_all(authors, ";( 2nd)", "\\1"),
+                     authors
+    )
+  ) %>%
+  mutate(
+    authors = ifelse(cord_uid %in% test.3rd,
+                     str_replace_all(authors, ";( 3rd)", "\\1"),
+                     authors
+    )
+  ) %>%
+  mutate(
+    authors = ifelse(cord_uid %in% test.III,
+                     str_replace_all(authors, ";( III)", "\\1"),
+                     authors
+    )
   )
+  
 
 # recalculate All authors
 {
@@ -298,28 +363,55 @@ metadata <- metadata %>%
 }
 
 jrPattern <- "^(.*)[\\, ]Jr\\.?\\,(.*)\\,?$"
-test.authors.jr <- allAuthors %>% 
-  filter(str_detect(authors, jrPattern)) %>%
+srPattern <- "^(.*)[\\, ]Sr\\.?\\,(.*)\\,?$"
+p2ndPattern <- "^(.*)[\\, ]2nd\\.?\\,(.*)\\,?$"
+p3rdPattern <- "^(.*)[\\, ]3nd\\.?\\,(.*)\\,?$"
+pIIIPattern <- "^(.*)[\\, ]III\\.?\\,(.*)\\,?$"
+test.authors.jr.sr.2nd <- allAuthors %>% 
+  filter(str_detect(authors, jrPattern) | 
+           str_detect(authors, srPattern) | 
+           str_detect(authors, p2ndPattern) |
+           str_detect(authors, p3rdPattern) |
+           str_detect(authors, pIIIPattern)
+         ) %>%
   pull(author_row)
 
-authors.fix.Jr <- function(allAuthors) {
+authors.fix.Jr.Sr.2nd <- function(allAuthors) {
   allAuthors %>%  
     mutate(
       authors_3=authors,
-      authors=ifelse(
-        author_row %in% test.authors.jr,
-        str_replace(authors, "^(.*)\\,$", "\\1") %>%
-          str_replace(jrPattern, "\\1, \\2 Jr.") %>% 
-          str_replace("\\,\\,?  ?", ", "),
-        authors
-      )
-    ) 
+      # authors=ifelse(
+      #   author_row %in% test.authors.jr.sr.2nd,
+      #   str_replace(authors, "^(.*)\\,$", "\\1") %>%
+      #     str_replace(jrPattern, "\\1, \\2 Jr.") %>% 
+      #     str_replace(srPattern, "\\1, \\2 Sr.") %>% 
+      #     str_replace(p2ndPattern, "\\1, \\2 2nd") %>% 
+      #     str_replace(p3rdPattern, "\\1, \\2 3nd") %>% 
+      #     str_replace(pIIIPattern, "\\1, \\2 III") %>% 
+      #     str_replace("\\,\\,?  ?", ", "),
+      #   authors
+      # )
+    ) %>% (function(data) {
+          tmpAuthors <- data$authors[data$author_row %in% test.authors.jr.sr.2nd]
+          data$authors[data$author_row %in% test.authors.jr.sr.2nd] <- str_replace(tmpAuthors, "^(.*)\\,$", "\\1") %>%
+                str_replace(jrPattern, "\\1, \\2 Jr.") %>%
+                str_replace(srPattern, "\\1, \\2 Sr.") %>%
+                str_replace(p2ndPattern, "\\1, \\2 2nd") %>%
+                str_replace(p3rdPattern, "\\1, \\2 3nd") %>%
+                str_replace(pIIIPattern, "\\1, \\2 III") %>%
+                str_replace("\\,\\,?  ?", ", ");
+          data
+    }) 
 }
 
-message(sprintf("Fixing 'Jr.' string on %d authors", test.authors.jr %>% length()))
+message(sprintf("Fixing 'Jr./Sr./2nd/3rd/III' string on %d authors", test.authors.jr.sr.2nd %>% length()))
 
-allAuthors <- allAuthors %>% 
-  authors.fix.Jr()
+{
+  tic()
+  allAuthors <- allAuthors %>% 
+    authors.fix.Jr.Sr.2nd()
+  toc()
+}
 
 etPatternMetadata <- "; ?et,"
 test.et <- metadata %>%
@@ -328,8 +420,8 @@ test.et <- metadata %>%
   unique()
   
 etPattern <- "^ ?et,?$"
-alPattern <- "^ ?al,?$" 
-alEtPattern <- "^ ?al.*et,?$"
+alPattern <- "^ ?al\\.?,?$" 
+alEtPattern <- "^ ?al[\\.\\, ]*et,?$"
 alEtOrPattern <- sprintf("(%s)|(%s)|(%s)", etPattern, alPattern, alEtPattern)
 test.etAl <- allAuthors %>% 
   filter(str_detect(authors, alEtOrPattern)) %>% 
@@ -341,8 +433,142 @@ authors.fix.etAl <- function(allAuthors) {
     filter(!str_detect(authors, alEtOrPattern))
 }
 
+message(sprintf("Fixing 'et.al' patterns on %d authors", test.etAl %>% length()))
 allAuthors <- allAuthors %>%
   authors.fix.etAl()
 
+## Removing author entries of form "quot,;"
+authors.fix.quot <- function(allAuthors) {
+  allAuthors %>% 
+    filter(!str_detect(authors, "quot,$"))
+}
+
+allAuthors <- allAuthors %>%
+  authors.fix.quot()
+
+####### 
+# Single letter authors
+
+singleLetterPattern <- "^[:upper:]\\.[ ,]*$"
+test.single.letter <- allAuthors %>%
+  filter(str_detect(authors, singleLetterPattern)) %>%
+  pull(cord_uid) %>%
+  unique()
+
+authors.fix.remove.single.letter <- function(allAuthors) {
+  allAuthors %>% 
+    filter(!str_detect(authors, singleLetterPattern))
+}
+
+# metadata %>% articleView(test.single.letter )
+
+message(sprintf("Removing %d single letter authors.", 
+        allAuthors %>%
+          filter(str_detect(authors, singleLetterPattern)) %>% nrow
+))
+allAuthors <- allAuthors %>%
+  authors.fix.remove.single.letter()
+
+
+########################
+## Comma at the end
+## Current fix - remove comma
+
+authors.fix.comma <- function(allAuthors) {
+  commaPattern <- "^(.*)\\,$"
+  inds <- str_which(allAuthors$authors, commaPattern)
+  tmp <- allAuthors$authors[inds]
+  allAuthors$authors[inds] <- str_replace(tmp, ",$", "")
+  allAuthors
+}
+
+commaPattern <- "^(.*)\\,$"
+# Other comma names
+# allAuthors %>%
+#   filter(str_detect(authors, commaPattern)) %>%
+#   pull(authors) %>%
+#   sortedFreqs() %>%
+#   View
+
+test.comma.pattern <- allAuthors %>%
+  filter(str_detect(authors, commaPattern))
+
+allAuthors <- allAuthors %>%
+  authors.fix.comma() 
+
+allAuthors %>% View
+
+########################
+## Authors starting with capital letter
+
+# abbrevNameStartPattern <- "^[:upper:]\\..*"
+# 
+# allAuthors %>% 
+#   filter(str_detect(authors, abbrevNameStartPattern)) %>% 
+#   authorTitleLinksInExcel("tmp_data/abbrDotStart.xlsx") 
+
+
+########################
+# Find all non-asci characters
+# https://stackoverflow.com/questions/53141997/what-is-this-crazy-german-character-combination-to-represent-an-umlaut
+# https://stackoverflow.com/questions/33561962/umlaut-matching-in-r-regex
+# https://withblue.ink/2019/03/11/why-you-need-to-normalize-unicode-strings.html
+allAuthors %>% 
+  filter(row_id == 20881) %>% 
+  pull(authors) %>% 
+  .[[1]] %>% 
+  stri_trans_nfc() %>% View
+  str_remove_all("[a-zA-Z \\.,\\-]")
+  utf8ToInt()
+
+
+
+nonASCII <- allAuthors %>% 
+  mutate(
+    nonASCIIChars = stri_trans_nfc(authors) %>% str_remove_all("[a-zA-Z \\.,\\-]")
+  ) %>%
+  filter(
+    str_length(nonASCIIChars) != 0
+  ) %>%
+  arrange(nonASCIIChars)
+  
+nonASCII %>% select(authors, nonASCIIChars) %>% View
+  
+nonASCII %>% 
+  pull(nonASCIIChars) %>%
+  stri_trans_nfc() %>%
+  unique %>%
+  paste0(collapse = "") %>% 
+  strsplit("") %>%
+  .[[1]] %>% 
+  (function(names){
+    tibble(letter=names)
+  }) %>% View
+  
+nonASCII[nonASCII %>% order()] %>% View
+
+########################
+## Extract first full 2-letter word as surname
+str_remove_all("a", "a")
 
   
+# TODO:
+#   - al., - Verify
+#   - 2nd, - Verify
+#   - Sr., - Verify
+#   - 3rd, III
+#   - M.
+#   - Inc
+#   - amp, quot, Iacute, Uuml - Verify
+#   - vejice
+#   - Arxiv obrat
+
+# testPattern <-"[sScCZz]caron[,;]"
+# metadata %>%
+#   filter(str_detect(authors, testPattern)) %>%
+#   # head(100) %>%
+#   select(cord_uid, authors, title, source_x) %>%
+#    View
+#   length()
+
+

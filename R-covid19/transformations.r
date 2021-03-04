@@ -2,8 +2,17 @@
 ## Helper functions
 ###########################################################
 
-articleView <- function(metadata, cordUids) {
-  metadata %>% filter(cord_uid %in% cordUids) %>% View
+articleView <- function(metadata, cordUids, short=FALSE) {
+  metadata %>% 
+    filter(cord_uid %in% cordUids) %>% 
+    (function(data) {
+      if(short) {
+        data %>% select(cord_uid, title, authors)
+      } else {
+        data
+      }
+    }) %>% 
+    View
 }
 
 distinctArticleCount <- function(data) {
@@ -42,3 +51,15 @@ extractAllAuthors <- function(metadata) {
     )
 }
 
+authorTitleLinksInExcel <- function(data, fname) {
+  data %>% 
+    select(source_x, title, authors) %>%
+    mutate(
+      url = sprintf("https://www.google.com/search?q=%s", str_replace_all(title, " ", "+"))
+    ) %>%
+    (function(data) {
+      class(data$url) <- "hyperlink"
+      data
+    }) %>% 
+    write.xlsx(fname)
+}

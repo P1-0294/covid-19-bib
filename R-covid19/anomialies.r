@@ -692,6 +692,15 @@ metadata <- metadata %>%
 
 allAuthors %>% filter(str_detect(authors, "^Jr.,")) %>% View
 
+abbrevNamePattern <- "^[:upper:]\\. ?\\,?$"
+test.abbrevName <- allAuthors %>% 
+  filter(str_detect(authors, abbrevNamePattern)) %>%
+  pull(cord_uid) %>%
+  unique()
+
+test.abbrevName %>% articleView(metadata, ., T)
+
+metadata %>% filter(str_detect(authors, "acute")) %>% View
 ## Comma authors containing numbers, but not 19
 commaAuthors %>%
   mutate(
