@@ -17,7 +17,8 @@ packages <- c(
   "purrr", 
   "data.table",
   "tools",
-  "utf8"
+  "utf8",
+  "stringi"
 )
 
 for (package in packages) {
@@ -145,6 +146,11 @@ if(! ("author_diff_cnt" %in% names(metadata))) {
 test.moreThan3Author <- metadata %>% 
   filter(author_diff_cnt > 2) %>% pull(cord_uid) %>% unique
 
+# metadata %>% 
+#   filter(author_diff_cnt > 2) %>% 
+#   arrange(cord_uid) %>%
+#   select(cord_uid, authors, title, abstract) %>% View
+
 message(sprintf("%d papers with more than 3 different author strings thrown out. Some should be inspected in detail.", test.moreThan3Author %>% length))
 
 ## METADATA DROP: filter out cases with more than 3 different author strings
@@ -225,6 +231,12 @@ test.apostrophe039 <- metadata %>%
   pull(cord_uid) %>%
   unique() 
 
+# metadata %>%
+#   filter(cord_uid %in% test.apostrophe039) %>%
+#   arrange(cord_uid) %>%
+#   select(cord_uid, authors, title, abstract) %>% View
+
+
 message(sprintf("Fixing apostrophe character 039 code in %d papers.", test.apostrophe039 %>% length))
 metadata <- metadata %>% 
   mutate(
@@ -260,6 +272,18 @@ if(! ("amp" %in% names(metadata))) {
 test.ampAuthors <- ampAuthors %>% 
   pull(cord_uid) %>% 
   unique()
+
+# metadata %>%
+#   filter(cord_uid %in% test.ampAuthors) %>%
+#   arrange(cord_uid) %>%
+#   select(cord_uid, authors, title, abstract) %>% View
+
+
+
+# metadata %>%
+#   filter(cord_uid %in% test.ampAuthors) %>%
+#   arrange(cord_uid) %>%
+#   select(cord_uid, authors, title, abstract) %>% View
 
 message(sprintf("Dropping %s papers with wrong &amp metacharacters (unrecoverable)", test.ampAuthors %>% length()))
 # METADATA: drop `amp`
@@ -312,6 +336,12 @@ test.III <- allAuthors %>%
   filter(str_detect(authors, "^III,")) %>% 
   pull(cord_uid) %>%
   unique
+
+# metadata %>%
+#   filter(cord_uid %in% test.III) %>%
+#   arrange(cord_uid) %>%
+#   select(cord_uid, authors, title, abstract) %>% View
+
 
 message(sprintf("Fixing 'authors' strings on %d/%d/%d/%d/%d papers in regard to 'Jr./Sr./2nd/3rd/III' wrong parsing", 
                 test.Jr %>% length(),
@@ -418,7 +448,7 @@ test.et <- metadata %>%
   filter(str_detect(authors, etPatternMetadata)) %>%
   pull(cord_uid) %>%
   unique()
-  
+
 etPattern <- "^ ?et,?$"
 alPattern <- "^ ?al\\.?,?$" 
 alEtPattern <- "^ ?al[\\.\\, ]*et,?$"
@@ -427,6 +457,11 @@ test.etAl <- allAuthors %>%
   filter(str_detect(authors, alEtOrPattern)) %>% 
   pull(cord_uid) %>%
   unique()
+
+# metadata %>%
+#   filter(cord_uid %in% test.etAl) %>%
+#   arrange(cord_uid) %>%
+#   select(cord_uid, authors, title, abstract) %>% View
 
 authors.fix.etAl <- function(allAuthors) {
   allAuthors %>%
@@ -454,6 +489,11 @@ test.single.letter <- allAuthors %>%
   filter(str_detect(authors, singleLetterPattern)) %>%
   pull(cord_uid) %>%
   unique()
+
+# metadata %>%
+#   filter(cord_uid %in% test.single.letter) %>%
+#   arrange(cord_uid) %>%
+#   select(cord_uid, authors, title, abstract) %>% View
 
 authors.fix.remove.single.letter <- function(allAuthors) {
   allAuthors %>% 
@@ -493,10 +533,15 @@ commaPattern <- "^(.*)\\,$"
 test.comma.pattern <- allAuthors %>%
   filter(str_detect(authors, commaPattern))
 
+# metadata %>%
+#   filter(cord_uid %in% test.comma.pattern) %>%
+#   arrange(cord_uid) %>%
+#   select(cord_uid, authors, title, abstract) %>% View
+
 allAuthors <- allAuthors %>%
   authors.fix.comma() 
 
-allAuthors %>% View
+# allAuthors %>% View
 
 ########################
 ## Authors starting with capital letter
@@ -513,13 +558,13 @@ allAuthors %>% View
 # https://stackoverflow.com/questions/53141997/what-is-this-crazy-german-character-combination-to-represent-an-umlaut
 # https://stackoverflow.com/questions/33561962/umlaut-matching-in-r-regex
 # https://withblue.ink/2019/03/11/why-you-need-to-normalize-unicode-strings.html
-allAuthors %>% 
-  filter(row_id == 20881) %>% 
-  pull(authors) %>% 
-  .[[1]] %>% 
-  stri_trans_nfc() %>% View
-  str_remove_all("[a-zA-Z \\.,\\-]")
-  utf8ToInt()
+# allAuthors %>% 
+#   filter(row_id == 20881) %>% 
+#   pull(authors) %>% 
+#   .[[1]] %>% 
+#   stri_trans_nfc() %>% 
+#   str_remove_all("[a-zA-Z \\.,\\-]")
+#   utf8ToInt()
 
 
 
