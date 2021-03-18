@@ -97,9 +97,12 @@ if (DOWNLOAD) {
   }
 }
 
+outFile <- sprintf("../../data/exports/%s-metadata.csv.gz", latestReleaseDate)
+
 ###########################################################
 ## Load metadata.csv
 ###########################################################
+initialNames <- NULL;
 
 {
   message("Loading metadata.")
@@ -107,6 +110,7 @@ if (DOWNLOAD) {
   if(LOAD) {
     metadata <- fread(METADATA, colClasses = c("character"))
     metadata0 <- metadata
+    initialNames <- names(metadata)
   }
   toc()   # much faster, takes < 8s
 }
@@ -273,10 +277,10 @@ test.ampAuthors <- ampAuthors %>%
   pull(cord_uid) %>% 
   unique()
 
-# metadata %>%
-#   filter(cord_uid %in% test.ampAuthors) %>%
-#   arrange(cord_uid) %>%
-#   select(cord_uid, authors, title, abstract) %>% View
+metadata %>%
+  filter(cord_uid %in% test.ampAuthors) %>%
+  arrange(cord_uid) %>%
+  select(cord_uid, authors, title, abstract) %>% View
 
 
 
@@ -295,14 +299,21 @@ metadata <- metadata %>%
 # METADATA: drop some other 'amp' related papers (unparsable)
 amp2pattern <- "(amp,;)|(Iacute,;)|(Uuml,;)|(acute[,;])|(breve,)|(uml[,;])|([sScCZz]caron[,;])"
 test.amp2 <- metadata %>% 
-  filter(!str_detect(authors, amp2pattern)) %>%
+  filter(str_detect(authors, amp2pattern)) %>%
   pull(cord_uid) %>%
   unique()
+
+
+metadata0 %>%
+  filter(cord_uid %in% test.amp2) %>%
+  arrange(cord_uid) %>%
+  select(cord_uid, authors, title, abstract) %>% View
+
 
 message(sprintf("Dropping %d papers with pattern \"(amp,;)|(Iacute,;)|(Uuml,;)|(acute[,;])|(breve,)|(uml[,;])\" in 'authors", test.amp2 %>% length))
 metadata <- metadata %>% 
   filter(!str_detect(authors, amp2pattern))
-
+ 
 # recalculate All authors
 {
   message("Extracting authors")
@@ -541,8 +552,68 @@ test.comma.pattern <- allAuthors %>%
 allAuthors <- allAuthors %>%
   authors.fix.comma() 
 
-# allAuthors %>% View
+startInitialPattern <- "^(([:upper:][\\. ])+) ?\\, ?([^,.][^.].*)$";
 
+fix.start.initial.pattern <- function(data) {
+  data %>%
+    mutate(authors = str_replace(authors, startInitialPattern, "\\3,\\1"))
+}
+
+test.fix.start.initial.pattern <- allAuthors %>% 
+  filter(str_detect(authors, startInitialPattern))
+
+message(sprintf("Fixing %d initial swaps.", test.fix.start.initial.pattern %>% nrow)) 
+                
+allAuthors <- allAuthors %>%
+  fix.start.initial.pattern()
+
+allAuthors %>% 
+  filter(str_detect(authors, startInitialPattern)) %>% View
+
+shortenNamesAndInitials <- function(column) {
+  column %>%
+    str_replace_all(", ", ",") %>%
+    str_replace_all(",([:upper:]+)[ \\.]", ",\\1") %>%
+    str_replace_all(",([:upper:]+)[^[:upper:]]+(.*)", ",\\1\\2")
+}
+
+{
+  tic();
+  allAuthorsGrouped <- allAuthors %>%
+    select(row_id, cord_uid, authors, author_row) %>%
+    mutate(
+      authors_short=shortenNamesAndInitials(authors) %>% 
+        shortenNamesAndInitials() %>%
+        shortenNamesAndInitials() %>%
+        shortenNamesAndInitials()
+    ) %>%
+    group_by(row_id, cord_uid) %>%
+    arrange(author_row) %>%
+    summarise(
+      authors_clean=paste0(authors, collapse=";"),
+      authors_short=paste0(authors_short, collapse=";")
+    );
+  
+  finalResult <- metadata %>% 
+    left_join(allAuthorsGrouped, by=c("row_id"="row_id", "cord_uid"="cord_uid")) %>%
+    mutate(
+      authors_original=authors_0,
+      authors=authors_clean
+    )
+  toc();
+}
+
+{
+  tic();
+  finalResult %>% 
+    select(c(initialNames, "authors_original", "authors_short")) %>%
+    write_csv(outFile)
+  toc();
+}
+
+head(finalResult) %>% View
+# metadata0 %>% nrow
+#  read_csv(outFile) %>% nrow
 ########################
 ## Authors starting with capital letter
 
@@ -568,33 +639,32 @@ allAuthors <- allAuthors %>%
 
 
 
-nonASCII <- allAuthors %>% 
-  mutate(
-    nonASCIIChars = stri_trans_nfc(authors) %>% str_remove_all("[a-zA-Z \\.,\\-]")
-  ) %>%
-  filter(
-    str_length(nonASCIIChars) != 0
-  ) %>%
-  arrange(nonASCIIChars)
-  
-nonASCII %>% select(authors, nonASCIIChars) %>% View
-  
-nonASCII %>% 
-  pull(nonASCIIChars) %>%
-  stri_trans_nfc() %>%
-  unique %>%
-  paste0(collapse = "") %>% 
-  strsplit("") %>%
-  .[[1]] %>% 
-  (function(names){
-    tibble(letter=names)
-  }) %>% View
-  
-nonASCII[nonASCII %>% order()] %>% View
+# nonASCII <- allAuthors %>% 
+#   mutate(
+#     nonASCIIChars = stri_trans_nfc(authors) %>% str_remove_all("[a-zA-Z \\.,\\-]")
+#   ) %>%
+#   filter(
+#     str_length(nonASCIIChars) != 0
+#   ) %>%
+#   arrange(nonASCIIChars)
+#   
+# nonASCII %>% select(authors, nonASCIIChars) %>% View
+#   
+# nonASCII %>% 
+#   pull(nonASCIIChars) %>%
+#   stri_trans_nfc() %>%
+#   unique %>%
+#   paste0(collapse = "") %>% 
+#   strsplit("") %>%
+#   .[[1]] %>% 
+#   (function(names){
+#     tibble(letter=names)
+#   }) %>% View
+#   
+# nonASCII[nonASCII %>% order()] %>% View
 
 ########################
 ## Extract first full 2-letter word as surname
-str_remove_all("a", "a")
 
   
 # TODO:

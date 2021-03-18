@@ -2,11 +2,100 @@
 
 ## CORD-19
 
+[CORD-19](https://arxiv.org/abs/2004.10706) (COVID-19 Open Research Dataset) is obtained from various sources. The sources include:
+
+- PMC
+- Medline
+- BioRxiv
+- ArXiv
+- Elsevier
+- MedRxiv
+- WHO
+
+It was updated daily until Feb 2021, now is being updated weekly or even more rarely.
+
+First release: 16 Mar, 2020.
+
+### Processing
+
+- collection and ingestion done through [Semantic Scholar literature search engine](https://semanticscholar.org/)
+- metadata is harmonized and deduplicated
+- paper documents parsed through [S2ORC pipeline](https://arxiv.org/abs/1911.02782)
+
+### Data description
+
+Data consists of the file `metadata.csv`, two folders with JSON files from parsed PDFs and parsed PMC(XML) files and some additional data.
+
+#### `Metadata.csv`
+
+[Detailed column description](https://github.com/allenai/cord19#metadatacsv-overview)
+
+- identifiers:
+  - `cord_uid`- unique identifier for the paper
+  - `sha`- SHA of all attached PDFs, `;`-separated  
+  - `doi`- DOI
+  - `pmcid`- PubMed ID
+  - `pubmed_id`- PubMed Central ID, if exists  
+  - `arxiv_id`- ArXiv 
+  - `mag_id`- [MAG identifier](https://www.aclweb.org/anthology/P18-4015/)   
+  - `who_covidence_id`- [WHO Covidence #](https://www.who.int/emergencies/diseases/novelcoronavirus-
+2019/global-research-on-novel-coronavirus-
+2019-ncov), if exists
+  - `s2_id`- Semantic Scholar ID
+  
+- article data  
+  - `source_x`- Source description. Comma separ 
+  - `title`- article title  
+  - `license`- type of license  
+  - `abstract`- article abstract 
+  - `publish_time`- publish date in form `yyyy-mm-dd` 
+  - `authors`- `;`-separated list of authors
+  - `journal`- journal identifier  
+
+- links to additional data:
+  - `pdf_json_files`- `;`-separated internal links to JSON files of parsed PDFs  
+  - `pmc_json_files`- `;`-separated internal links to JSON files obtained from parsed XML PMC files
+  - `url`- `;`-separated list of external 
+
+### Overview of the dataset
+
+Version `2021-03-08`
+
+<!--- metadata0 %>% pull(cord_uid) %>% unique() %>% length() -->
+- unique `cord_uid`s: 457294 
+<!--- metadata %>% select(source_x) %>% distinct() %>% separate_rows(source_x, sep=";") %>%  pull(source_x) %>% str_trim() %>% unique() %>% length() -->
+- number of sources: 7
+<!--- metadata0 %>% pull(doi) %>% .[!is.na(.) & . != ""] %>% unique() %>% length() -->
+- unique DOI entries: 266295
+<!--- metadata0 %>% pull(pmcid) %>% .[!is.na(.) & . != ""] %>% unique() %>% length() -->
+- unique `pmcid`: 170722
+<!--- metadata0 %>% pull(pubmed_id) %>% .[!is.na(.) & . != ""] %>% unique() %>% length() -->
+- unique `pubmed_id`: 233243
+<!--- metadata0 %>% pull(arxiv_id) %>% .[!is.na(.) & . != ""] %>% unique() %>% length() -->
+- unique `arxiv_id`: 6377
+<!--- metadata0 %>% pull(mag_id) %>% .[!is.na(.) & . != ""] %>% unique() %>% length() -->
+- unique `mag_id`: 0
+<!--- metadata0 %>% pull(who_covidence_id) %>% .[!is.na(.) & . != ""] %>% unique() %>% length() -->
+- unique `who_covidence_id`: 197114
+<!--- metadata0 %>% pull(s2_id) %>% .[!is.na(.) & . != ""] %>% unique() %>% length() -->
+- unique `s2_id`: 197114
+
 ### Authors
+
+One of the challenges in bibliographic data is entity resolution, in particular related to authors.
+The first step is cleaning the authors data from CORD-19. In what follows we describe challenges encountered and methods for addressing them.
 
 #### Different author strings
 
+Article metadata is obtained from different sources. Different sources use different conventions for stating author names. For each `cord_uid` there can be several row entries representing an article for different sources.
+Groups of rows (article entries) with the same `cord_uid` can hence have different `;`-separated strings of authors. 
+
+<!--- metadata0 %>% filter(cord_uid %in% test.moreThan3Author) %>% arrange(cord_uid) %>% select(cord_uid, authors, title, abstract, source_x) %>% View
+-->
+In particular, if we take `cord_uid` groups with more than 2 different strings there are `235` such groups.  
+
 #### Different author notation regarding name
+
 ```
 03kd1kby
 Keane, M. J.

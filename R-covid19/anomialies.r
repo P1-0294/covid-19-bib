@@ -817,14 +817,34 @@ allAuthorsDotted <- allAuthors %>% filter(str_detect(authors, "\\."))
 allAuthorsDotted %>% View
 
 # Dotted abbrev. name replacement
-dotPattern <- "([ \\.][:upper:])\\.\\s*"
+dotPattern <- "([ \\.]?[:upper:])\\.\\s*"
 dotReplacement <- "\\1 "
-dotReplace <- function(column) str_replace_all(column, dotPattern, dotReplacement) %>% str_trim()
+dotReplace <- function(column) {
+  str_replace_all(column, "([ \\.][:upper:])\\.\\s*", "\\1") 
+  # str_replace_all("\\, *", ",") %>% 
+  # str_replace_all(" +$", "") %>%
+  # str_replace_all("(,.*)(([:upper:])[^ ]+)(.*)$", "\\1\\3\\4") %>%
+  # str_trim() 
+}
+ 
+action <- function(column) {
+  column %>%
+    str_replace_all(", ", ",") %>%
+    str_replace_all(",([:upper:]+)[ \\.]", ",\\1") %>%
+    str_replace_all(",([:upper:]+)[^[:upper:]]+(.*)", ",\\1\\2")
+}
+
 c(
   "Surname, Name M.",
   "Surname, M. Name",
   "Surname, J.M.",
-  " M.") %>% dotReplace() %>% dotReplace()
+  "Surname,J.M.N",
+  "Surname,J M N",
+  " M.") %>% action() %>% action()
+
+  
+str_replace_all("(\\,.*)([:upper:])\\.(.*)$", "\\1\\2\\3") %>%
+  str_replace_all("(\\,.*)([:upper:])\\.(.*)$", "\\1\\2\\3")
 
 namePattern <- "(\\,.*)([:upper:])[:lower:]+(.*)" 
 nameReplace <- function(column) { str_replace_all(column, namePattern, "\\1\\2\\3") }
